@@ -68,15 +68,19 @@ fn to_stat(content: &str) -> Stat {
             _       => continue,
         }).1;
 
-        let re_cpu = Regex::new(r"cpu ").unwrap();
-        let re_core = Regex::new(r"cpu(?P<num>\d*) ").unwrap();
+        lazy_static! {
+            static ref RE_CPU: Regex =
+                Regex::new(r"cpu ").unwrap();
+            static ref RE_CORE: Regex =
+                Regex::new(r"cpu(?P<num>\d*) ").unwrap();
+        }
 
-        if re_cpu.is_match(line) {
+        if RE_CPU.is_match(line) {
             // create cpu from string
             stat.cpu = Cpu::new(CpuType::Total, tail);
 
-        } else if re_core.is_match(line) {
-            let caps = re_core.captures(line).unwrap();
+        } else if RE_CORE.is_match(line) {
+            let caps = RE_CORE.captures(line).unwrap();
 
             // unwrap matched num
             let num = usize::from_str(&caps["num"]).unwrap();

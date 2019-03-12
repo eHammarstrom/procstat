@@ -5,6 +5,24 @@ use std::convert::identity;
 
 use regex::Regex;
 
+use crate::safevec::SafeVec;
+
+#[derive(Debug,Clone)]
+pub struct Stat {
+    cpu: Option<Cpu>,              // total cpu info
+    cpus: Option<Vec<Cpu>>,        // specific cpu info (cpu0, cpu1, ..)
+    page: Option<(u64, u64)>,      // pages paged (in, out) from disk
+    swap: Option<(u64, u64)>,      // pages brought (in, out)
+    intr: Option<(u64, Vec<u64>)>, // total num interrupts
+                                   // TODO: disk_io
+    ctxt: Option<u64>,             // num context switches
+    btime: Option<u64>,            // time of boot up
+    procs: Option<u64>,            // forks since boot
+    procs_running: Option<u64>,
+    procs_blocked: Option<u64>,
+    softirq: Option<Vec<u64>>,
+}
+
 #[derive(Debug,Clone)]
 pub enum CpuType {
     Total,
@@ -13,42 +31,48 @@ pub enum CpuType {
 
 #[derive(Debug,Clone)]
 pub struct Cpu {
-    typ: CpuType,
-    pub total_intr: u64,
+    pub typ: CpuType,
+    pub time_nice: u64,
 }
 
 impl Cpu {
     pub fn new(typ: CpuType, tail: &str) -> Option<Cpu> {
-        let nums: Vec<Option<u64>> = tail
-            .split(' ')
-            .filter(|x| !x.is_empty())
-            .map(u64::from_str)
-            .map(Result::ok)
-            .collect();
+        let opt_nums = parse_nums(tail);
 
-        // TODO: use all of the intr data
-
-        nums[0].map(|i| Cpu {
-            typ,
-            total_intr: i,
-        })
+        opt_nums
+            .and_then(|mut x| x.safe_remove(0)) // TODO: use all timings
+            .map(|x| Cpu { typ, time_nice: x })
     }
 }
 
-#[derive(Debug,Clone)]
-pub struct Stat {
-    cpu: Option<Cpu>,         // total cpu info
-    cpus: Option<Vec<Cpu>>,   // specific cpu info (cpu0, cpu1, ..)
-    page: Option<(u64, u64)>,  // pages paged (in, out) from disk
-    swap: Option<(u64, u64)>, // pages brought (in, out)
-    intr: Option<u64>,        // total num interrupts
-    // TODO: disk_io
-    ctxt: Option<u64>, // num context switches
-    btime: Option<u64>, // time of boot up
-    procs: Option<u64>, // forks since boot
-    procs_running: Option<u64>,
-    procs_blocked: Option<u64>,
-    softirq: Option<Vec<u64>>,
+fn parse_nums(tail: &str) -> Option<Vec<u64>> {
+    let parsed_nums: Vec<Option<u64>> = tail
+        .split(' ')
+        .filter(|x| !x.is_empty())
+        .map(u64::from_str)
+        .map(Result::ok)
+        .collect();
+
+    let nums: Vec<u64> = parsed_nums
+        .into_iter()
+        .filter_map(identity)
+        .collect();
+
+    if nums.is_empty() {
+        None
+    } else {
+        Some(nums)
+    }
+}
+
+fn parse_intr(tail: &str) -> Option<(u64, Vec<u64>)> {
+    let opt_nums = parse_nums(tail);
+
+    opt_nums.map(|mut nums| {
+        // parse_nums returns vec.len() >= 1
+        let head = nums.remove(0);
+        (head, nums)
+    })
 }
 
 fn to_stat(content: &str) -> Stat {
@@ -73,13 +97,17 @@ fn to_stat(content: &str) -> Stat {
                 Regex::new(r"cpu ").unwrap();
             static ref RE_CORE: Regex =
                 Regex::new(r"cpu(?P<num>\d*) ").unwrap();
+            static ref RE_INTR: Regex =
+                Regex::new(r"intr ").unwrap();
+            static ref RE_CTXT: Regex =
+                Regex::new(r"ctxt ").unwrap();
         }
 
         if RE_CPU.is_match(line) {
-            // create cpu from string
+            /* CPU field */
             stat.cpu = Cpu::new(CpuType::Total, tail);
-
         } else if RE_CORE.is_match(line) {
+            /* CPU# field */
             let caps = RE_CORE.captures(line).unwrap();
 
             // unwrap matched num
@@ -89,7 +117,13 @@ fn to_stat(content: &str) -> Stat {
             let core = Cpu::new(CpuType::Core(num), tail);
 
             cpus.push(core);
-
+        } else if RE_INTR.is_match(line) {
+            /* INTR field */
+            stat.intr = parse_intr(tail);
+        } else if RE_CTXT.is_match(line) {
+            /* CTXT field */
+            let res_ctxt = u64::from_str(tail.trim());
+            stat.ctxt = res_ctxt.ok();
         }
     }
 

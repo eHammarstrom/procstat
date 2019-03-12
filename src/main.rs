@@ -4,6 +4,7 @@ use std::time::Instant;
 use std::fs::read_to_string;
 
 mod stat;
+mod safevec;
 
 fn main() {
     let _path = "/proc/stat";
@@ -19,4 +20,6 @@ fn main() {
 
     let stat = stat::Stat::new(&stat_contents);
     println!("{:?}", stat);
+
+    println!("{}", stat_contents);
 }

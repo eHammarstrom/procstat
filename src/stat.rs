@@ -4,8 +4,11 @@ use std::option::Option;
 use std::convert::identity;
 
 use regex::Regex;
+use lazy_static::lazy_static;
+use serde::{Serialize, Deserialize};
+use nom::types::CompleteStr;
 
-use crate::safevec::SafeVec;
+use crate::parse;
 
 #[derive(Debug,Clone)]
 pub struct Stat {
@@ -29,19 +32,36 @@ pub enum CpuType {
     Core(usize),
 }
 
+#[derive(Serialize,Deserialize,Default,Debug,Clone)]
+pub struct CpuTime {
+    pub user: u64,
+    pub nice: u64,
+    pub system: u64,
+    pub idle: u64,
+    // kernel version specific, may not be available
+    pub iowait: Option<u64>,
+    pub irq: Option<u64>,
+    pub softirq: Option<u64>,
+    pub steal: Option<u64>,
+    pub quest: Option<u64>,
+    pub quest_nice: Option<u64>,
+}
+
 #[derive(Debug,Clone)]
 pub struct Cpu {
     pub typ: CpuType,
-    pub time_nice: u64,
+    pub time: CpuTime,
 }
 
 impl Cpu {
     pub fn new(typ: CpuType, tail: &str) -> Option<Cpu> {
-        let opt_nums = parse_nums(tail);
+        let res = parse::cpu_time(CompleteStr(tail));
 
-        opt_nums
-            .and_then(|mut x| x.safe_remove(0)) // TODO: use all timings
-            .map(|x| Cpu { typ, time_nice: x })
+        if let Ok((_, time)) = res {
+            Some(Cpu { typ, time })
+        } else {
+            None
+        }
     }
 }
 
@@ -93,37 +113,37 @@ fn to_stat(content: &str) -> Stat {
         }).1;
 
         lazy_static! {
-            static ref RE_CPU: Regex =
-                Regex::new(r"cpu ").unwrap();
             static ref RE_CORE: Regex =
-                Regex::new(r"cpu(?P<num>\d*) ").unwrap();
-            static ref RE_INTR: Regex =
-                Regex::new(r"intr ").unwrap();
-            static ref RE_CTXT: Regex =
-                Regex::new(r"ctxt ").unwrap();
+                Regex::new(r"cpu(?P<num>\d+) ").unwrap();
         }
 
-        if RE_CPU.is_match(line) {
-            /* CPU field */
-            stat.cpu = Cpu::new(CpuType::Total, tail);
-        } else if RE_CORE.is_match(line) {
-            /* CPU# field */
+        if RE_CORE.is_match(line) {
+            // cpu# prefix parse
             let caps = RE_CORE.captures(line).unwrap();
 
             // unwrap matched num
-            let num = usize::from_str(&caps["num"]).unwrap();
+            let num = usize::from_str(&caps["num"]).expect("wat");
 
             // create a cpu core from string
             let core = Cpu::new(CpuType::Core(num), tail);
 
             cpus.push(core);
-        } else if RE_INTR.is_match(line) {
-            /* INTR field */
+        } else if &line[..3] == "cpu" {
+            stat.cpu = Cpu::new(CpuType::Total, tail);
+        } else if &line[..4] == "intr" {
             stat.intr = parse_intr(tail);
-        } else if RE_CTXT.is_match(line) {
-            /* CTXT field */
-            let res_ctxt = u64::from_str(tail.trim());
-            stat.ctxt = res_ctxt.ok();
+        } else if &line[..4] == "ctxt" {
+            stat.ctxt = u64::from_str(tail.trim()).ok();
+        } else if &line[..5] == "btime" {
+            stat.btime = u64::from_str(tail.trim()).ok();
+        } else if &line[..9] == "processes" {
+            stat.procs = u64::from_str(tail.trim()).ok();
+        } else if &line[..13] == "procs_running" {
+            stat.procs_running = u64::from_str(tail.trim()).ok();
+        } else if &line[..13] == "procs_blocked" {
+            stat.procs_blocked = u64::from_str(tail.trim()).ok();
+        } else if &line[..7] == "softirq" {
+            stat.softirq = parse_nums(tail);
         }
     }
 
@@ -133,7 +153,7 @@ fn to_stat(content: &str) -> Stat {
         .filter_map(identity)
         .collect();
 
-    if _cpus.len() > 0 {
+    if !_cpus.is_empty() {
         stat.cpus = Some(_cpus);
     }
 
@@ -145,5 +165,5 @@ impl Stat {
         to_stat(stat_contents)
     }
 
-    pub fn cpu(&self) -> &Option<Cpu> { &self.cpu }
+    // pub fn cpu(&self) -> &Option<Cpu> { &self.cpu }
 }

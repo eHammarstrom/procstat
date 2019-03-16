@@ -38,13 +38,13 @@ pub struct CpuTime {
     pub nice: u64,
     pub system: u64,
     pub idle: u64,
-    // kernel version specific, may not be available
-    pub iowait: Option<u64>,
-    pub irq: Option<u64>,
-    pub softirq: Option<u64>,
-    pub steal: Option<u64>,
-    pub quest: Option<u64>,
-    pub quest_nice: Option<u64>,
+    // Linux kernel specific
+    pub iowait: Option<u64>,     // 2.5.41
+    pub irq: Option<u64>,        // 2.6.0
+    pub softirq: Option<u64>,    // 2.6.0
+    pub steal: Option<u64>,      // 2.6.11
+    pub quest: Option<u64>,      // 2.6.24
+    pub quest_nice: Option<u64>, // 2.6.33
 }
 
 #[derive(Debug,Clone)]

@@ -1,4 +1,6 @@
 use std::str::FromStr;
+use std::convert::identity;
+
 use nom::{
     types::CompleteStr,
     do_parse,opt,named,map_res,
@@ -33,3 +35,33 @@ named!(pub cpu_time<CompleteStr, CpuTime>, do_parse!(
         quest, quest_nice
     })
 ));
+
+pub fn str_of_nums(tail: &str) -> Option<Vec<u64>> {
+    let parsed_nums: Vec<Option<u64>> = tail
+        .split(' ')
+        .filter(|x| !x.is_empty())
+        .map(u64::from_str)
+        .map(Result::ok)
+        .collect();
+
+    let nums: Vec<u64> = parsed_nums
+        .into_iter()
+        .filter_map(identity)
+        .collect();
+
+    if nums.is_empty() {
+        None
+    } else {
+        Some(nums)
+    }
+}
+
+pub fn intr(tail: &str) -> Option<(u64, Vec<u64>)> {
+    let opt_nums = str_of_nums(tail);
+
+    opt_nums.map(|mut nums| {
+        // parse_nums returns vec.len() >= 1
+        let head = nums.remove(0);
+        (head, nums)
+    })
+}

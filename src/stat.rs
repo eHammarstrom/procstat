@@ -1,7 +1,6 @@
 use std::str::FromStr;
-use std::result::Result;
-use std::option::Option;
 use std::convert::identity;
+use std::option::Option;
 
 use regex::Regex;
 use lazy_static::lazy_static;
@@ -12,18 +11,18 @@ use crate::parse;
 
 #[derive(Debug,Clone)]
 pub struct Stat {
-    cpu: Option<Cpu>,              // total cpu info
-    cpus: Option<Vec<Cpu>>,        // specific cpu info (cpu0, cpu1, ..)
-    page: Option<(u64, u64)>,      // pages paged (in, out) from disk
-    swap: Option<(u64, u64)>,      // pages brought (in, out)
-    intr: Option<(u64, Vec<u64>)>, // total num interrupts
+    pub cpu: Option<Cpu>,              // total cpu info
+    pub cpus: Option<Vec<Cpu>>,        // specific cpu info (cpu0, cpu1, ..)
+    pub page: Option<(u64, u64)>,      // pages paged (in, out) from disk
+    pub swap: Option<(u64, u64)>,      // pages brought (in, out)
+    pub intr: Option<(u64, Vec<u64>)>, // total num interrupts
                                    // TODO: disk_io
-    ctxt: Option<u64>,             // num context switches
-    btime: Option<u64>,            // time of boot up
-    procs: Option<u64>,            // forks since boot
-    procs_running: Option<u64>,
-    procs_blocked: Option<u64>,
-    softirq: Option<Vec<u64>>,
+    pub ctxt: Option<u64>,             // num context switches
+    pub btime: Option<u64>,            // time of boot up
+    pub procs: Option<u64>,            // forks since boot
+    pub procs_running: Option<u64>,
+    pub procs_blocked: Option<u64>,
+    pub softirq: Option<Vec<u64>>,
 }
 
 #[derive(Debug,Clone)]
@@ -65,36 +64,6 @@ impl Cpu {
     }
 }
 
-fn parse_nums(tail: &str) -> Option<Vec<u64>> {
-    let parsed_nums: Vec<Option<u64>> = tail
-        .split(' ')
-        .filter(|x| !x.is_empty())
-        .map(u64::from_str)
-        .map(Result::ok)
-        .collect();
-
-    let nums: Vec<u64> = parsed_nums
-        .into_iter()
-        .filter_map(identity)
-        .collect();
-
-    if nums.is_empty() {
-        None
-    } else {
-        Some(nums)
-    }
-}
-
-fn parse_intr(tail: &str) -> Option<(u64, Vec<u64>)> {
-    let opt_nums = parse_nums(tail);
-
-    opt_nums.map(|mut nums| {
-        // parse_nums returns vec.len() >= 1
-        let head = nums.remove(0);
-        (head, nums)
-    })
-}
-
 fn to_stat(content: &str) -> Stat {
     let mut stat = Stat {
         cpu: None, cpus: None, page: None, swap: None,
@@ -131,7 +100,7 @@ fn to_stat(content: &str) -> Stat {
         } else if &line[..3] == "cpu" {
             stat.cpu = Cpu::new(CpuType::Total, tail);
         } else if &line[..4] == "intr" {
-            stat.intr = parse_intr(tail);
+            stat.intr = parse::intr(tail);
         } else if &line[..4] == "ctxt" {
             stat.ctxt = u64::from_str(tail.trim()).ok();
         } else if &line[..5] == "btime" {
@@ -143,7 +112,7 @@ fn to_stat(content: &str) -> Stat {
         } else if &line[..13] == "procs_blocked" {
             stat.procs_blocked = u64::from_str(tail.trim()).ok();
         } else if &line[..7] == "softirq" {
-            stat.softirq = parse_nums(tail);
+            stat.softirq = parse::str_of_nums(tail);
         }
     }
 
@@ -164,6 +133,4 @@ impl Stat {
     pub fn new(stat_contents: &str) -> Stat {
         to_stat(stat_contents)
     }
-
-    // pub fn cpu(&self) -> &Option<Cpu> { &self.cpu }
 }

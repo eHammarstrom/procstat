@@ -1,11 +1,7 @@
-use std::str::FromStr;
 use std::convert::identity;
+use std::str::FromStr;
 
-use nom::{
-    types::CompleteStr,
-    do_parse,opt,named,map_res,
-    space,digit
-};
+use nom::{digit, do_parse, map_res, named, opt, space, types::CompleteStr};
 
 use crate::stat::CpuTime;
 use crate::stat::Paging;
@@ -45,10 +41,7 @@ pub fn str_of_nums(tail: &str) -> Option<Vec<u64>> {
         .map(Result::ok)
         .collect();
 
-    let nums: Vec<u64> = parsed_nums
-        .into_iter()
-        .filter_map(identity)
-        .collect();
+    let nums: Vec<u64> = parsed_nums.into_iter().filter_map(identity).collect();
 
     if nums.is_empty() {
         None
@@ -70,10 +63,8 @@ pub fn intr(tail: &str) -> Option<(u64, Vec<u64>)> {
 pub fn paging(tail: &str) -> Option<Paging> {
     let opt_nums = str_of_nums(tail);
 
-    opt_nums.map(|nums| {
-        Paging {
-            _in: nums[0],
-            _out: nums[1],
-        }
+    opt_nums.map(|nums| Paging {
+        _in: nums[0],
+        _out: nums[1],
     })
 }

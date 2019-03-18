@@ -1,5 +1,5 @@
-use std::vec::Vec;
 use std::option::Option;
+use std::vec::Vec;
 
 pub trait SafeVec<T> {
     fn safe_remove(&mut self, index: usize) -> Option<T>;

@@ -3,15 +3,15 @@
 extern crate test;
 
 use std::fs::read_to_string;
+use std::sync::{Arc, RwLock};
 use std::thread;
 use std::time::Duration;
-use std::sync::{Arc, RwLock};
 
-use ws::{listen, Handshake, Handler, Sender, Result, Message, CloseCode};
+use ws::{listen, CloseCode, Handler, Handshake, Message, Result, Sender};
 
-mod stat;
-mod safevec;
 mod parse;
+mod safevec;
+mod stat;
 
 fn parse_forever(stat_lock: Arc<RwLock<stat::Stat>>, path: &str) {
     println!("Parsing {} path every 1ms.", path);
@@ -23,8 +23,8 @@ fn parse_forever(stat_lock: Arc<RwLock<stat::Stat>>, path: &str) {
         thread::sleep(Duration::new(0, 1000000 - sleep_compensation));
 
         // read and parse stat file
-        let stat_contents = read_to_string(path)
-            .unwrap_or_else(|_| panic!("failed to read '{}'", path));
+        let stat_contents =
+            read_to_string(path).unwrap_or_else(|_| panic!("failed to read '{}'", path));
         let stat = stat::Stat::new(&stat_contents);
 
         // write new stat state to shared memory
@@ -53,39 +53,41 @@ impl Handler for Server {
         thread::spawn(move || {
             while *alive.read().unwrap() {
                 thread::sleep(freq);
+
                 let stat = stat_lock.read().unwrap();
-                if out.send(format!("{:?}", *stat)).is_err() {
+                let status = out.send(format!("{:?}", *stat));
+
+                if status.is_err() {
                     *alive.write().unwrap() = false;
                     return;
                 }
             }
         });
+
         Ok(())
     }
 
     // TODO: allow adjustment of send frequency
     fn on_message(&mut self, msg: Message) -> Result<()> {
-        println!("\"{}\" said Roger.", msg);
-        Ok(())
+        Ok(println!("\"{}\" said Roger.", msg))
     }
 
     fn on_close(&mut self, code: CloseCode, reason: &str) {
         println!("Jim, he's dead.");
-        // kill thread worker
+        // kill worker thread
         *self.alive.write().unwrap() = false;
     }
 }
 
 fn main() {
     let _path = "/proc/stat";
-    let stat_contents = read_to_string(_path)
-        .unwrap_or_else(|_| panic!("failed to read '{}'", _path));
+    let stat_contents =
+        read_to_string(_path).unwrap_or_else(|_| panic!("failed to read '{}'", _path));
     let stat = stat::Stat::new(&stat_contents);
 
     // initial lock state
     let stat_lock = Arc::new(RwLock::new(stat));
     let ws_stat_lock = stat_lock.clone();
-
 
     // start read, parse thread
     thread::spawn(move || parse_forever(stat_lock.clone(), _path));
@@ -95,7 +97,8 @@ fn main() {
         stat_lock: ws_stat_lock.clone(),
         freq: Duration::new(1, 0),
         alive: Arc::new(RwLock::new(true)),
-    }).unwrap();
+    })
+    .unwrap();
 }
 
 #[cfg(test)]
@@ -107,8 +110,8 @@ mod tests {
     fn stat_read_and_parse(b: &mut Bencher) {
         b.iter(|| {
             let _path = "/proc/stat";
-            let stat_contents = read_to_string(_path)
-                .unwrap_or_else(|_| panic!("failed to read '{}'", _path));
+            let stat_contents =
+                read_to_string(_path).unwrap_or_else(|_| panic!("failed to read '{}'", _path));
             stat::Stat::new(&stat_contents);
         })
     }
@@ -116,8 +119,8 @@ mod tests {
     #[bench]
     fn stat_parse(b: &mut Bencher) {
         let _path = "/proc/stat";
-        let stat_contents = read_to_string(_path)
-            .unwrap_or_else(|_| panic!("failed to read '{}'", _path));
+        let stat_contents =
+            read_to_string(_path).unwrap_or_else(|_| panic!("failed to read '{}'", _path));
 
         b.iter(|| stat::Stat::new(&stat_contents))
     }

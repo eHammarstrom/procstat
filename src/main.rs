@@ -25,8 +25,5 @@ fn main() {
     poor_mans_bench(&stat_contents, 10);
 
     let stat = stat::Stat::new(&stat_contents);
-    // println!("{}", stat_contents);
     println!("{:?}", stat);
-
-    println!("------\n{:?}", stat.cpu);
 }

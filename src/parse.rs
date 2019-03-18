@@ -8,6 +8,7 @@ use nom::{
 };
 
 use crate::stat::CpuTime;
+use crate::stat::Paging;
 
 // digit to u64 parser
 named!(_u64<CompleteStr, u64>, map_res!(digit, |CompleteStr(s)| u64::from_str(s)));
@@ -63,5 +64,16 @@ pub fn intr(tail: &str) -> Option<(u64, Vec<u64>)> {
         // parse_nums returns vec.len() >= 1
         let head = nums.remove(0);
         (head, nums)
+    })
+}
+
+pub fn paging(tail: &str) -> Option<Paging> {
+    let opt_nums = str_of_nums(tail);
+
+    opt_nums.map(|nums| {
+        Paging {
+            _in: nums[0],
+            _out: nums[1],
+        }
     })
 }

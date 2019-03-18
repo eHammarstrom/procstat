@@ -13,16 +13,22 @@ use crate::parse;
 pub struct Stat {
     pub cpu: Option<Cpu>,              // total cpu info
     pub cpus: Option<Vec<Cpu>>,        // specific cpu info (cpu0, cpu1, ..)
-    pub page: Option<(u64, u64)>,      // pages paged (in, out) from disk
-    pub swap: Option<(u64, u64)>,      // pages brought (in, out)
+    pub page: Option<Paging>,          // in, out pages from disk
+    pub swap: Option<Paging>,          // in, out swap pages
     pub intr: Option<(u64, Vec<u64>)>, // total num interrupts
-                                   // TODO: disk_io
+                                       // TODO: disk_io
     pub ctxt: Option<u64>,             // num context switches
     pub btime: Option<u64>,            // time of boot up
     pub procs: Option<u64>,            // forks since boot
     pub procs_running: Option<u64>,
     pub procs_blocked: Option<u64>,
     pub softirq: Option<Vec<u64>>,
+}
+
+#[derive(Debug,Clone)]
+pub struct Paging {
+    pub _in: u64,
+    pub _out: u64,
 }
 
 #[derive(Debug,Clone)]
@@ -99,6 +105,10 @@ fn to_stat(content: &str) -> Stat {
             cpus.push(core);
         } else if &line[..3] == "cpu" {
             stat.cpu = Cpu::new(CpuType::Total, tail);
+        } else if &line[..4] == "page" {
+            stat.page = parse::paging(tail);
+        } else if &line[..4] == "swap" {
+            stat.swap = parse::paging(tail);
         } else if &line[..4] == "intr" {
             stat.intr = parse::intr(tail);
         } else if &line[..4] == "ctxt" {

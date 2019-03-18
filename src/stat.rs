@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::parse;
 
-#[derive(Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Stat {
     pub cpu: Option<Cpu>,              // total cpu info
     pub cpus: Option<Vec<Cpu>>,        // specific cpu info (cpu0, cpu1, ..)
@@ -25,13 +25,13 @@ pub struct Stat {
     pub softirq: Option<Vec<u64>>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Paging {
     pub _in: u64,
     pub _out: u64,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum CpuType {
     Total,
     Core(usize),
@@ -52,7 +52,7 @@ pub struct CpuTime {
     pub quest_nice: Option<u64>, // 2.6.33
 }
 
-#[derive(Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Cpu {
     pub typ: CpuType,
     pub time: CpuTime,

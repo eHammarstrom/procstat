@@ -9,6 +9,8 @@ use std::time::Duration;
 
 use ws::{listen, CloseCode, Handler, Handshake, Message, Result, Sender};
 
+use serde_json;
+
 mod parse;
 mod safevec;
 mod stat;
@@ -55,7 +57,16 @@ impl Handler for Server {
                 thread::sleep(freq);
 
                 let stat = stat_lock.read().unwrap();
-                let status = out.send(format!("{:?}", *stat));
+                // convert stat to json string
+                let stat_to_json = serde_json::to_string(&(*stat));
+                let status = match stat_to_json {
+                    Ok(stat_json) => out.send(stat_json),
+                    Err(e) => {
+                        println!("Thread died with, {}", e);
+                        *alive.write().unwrap() = false;
+                        return;
+                    }
+                };
 
                 if status.is_err() {
                     *alive.write().unwrap() = false;

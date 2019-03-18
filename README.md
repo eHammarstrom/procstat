@@ -9,6 +9,16 @@ process information and statistics
 ## Usage
 
 
+## Protocol
+
+_A: starts procstat_
+_B: requests websocket to procstat_
+
+_A_ may specify the `disk_poll` rate and minimum `min_ws_poll_rate` of the /proc/stat file.
+
+_B_ may request a poll rate across the socket that is `min(disk_poll_rate, min_ws_poll_rate)`,
+procstat will try to deliver to the best of its abilities (and the computer's).
+
 
 ## todo?
 

@@ -1,29 +1,124 @@
+#![feature(test)]
+
+extern crate test;
+
 use std::fs::read_to_string;
+use std::thread;
+use std::time::Duration;
+use std::sync::{Arc, RwLock};
+
+use ws::{listen, Handshake, Handler, Sender, Result, Message, CloseCode};
 
 mod stat;
 mod safevec;
 mod parse;
 
-fn poor_mans_bench(stat_contents: &str, n: usize) {
-    let mut sum: u128 = 0;
-    use std::time::Instant;
-    for _i in 0..n {
-        let t0 = Instant::now();
-        stat::Stat::new(stat_contents);
-        println!("{} ns", t0.elapsed().as_nanos());
-        sum += t0.elapsed().as_nanos();
+fn parse_forever(stat_lock: Arc<RwLock<stat::Stat>>, path: &str) {
+    println!("Parsing {} path every 1ms.", path);
+    // compensate for wake up latency of thread
+    let mut sleep_compensation: u32 = 0;
+
+    loop {
+        // TODO: timestamp before and after sleep to calc avg. latency
+        thread::sleep(Duration::new(0, 1000000 - sleep_compensation));
+
+        // read and parse stat file
+        let stat_contents = read_to_string(path)
+            .unwrap_or_else(|_| panic!("failed to read '{}'", path));
+        let stat = stat::Stat::new(&stat_contents);
+
+        // write new stat state to shared memory
+        {
+            let mut s = stat_lock.write().unwrap();
+            *s = stat;
+        }
     }
-    println!("avg: {} ns", sum / n as u128);
+}
+
+struct Server {
+    out: Sender,
+    stat_lock: Arc<RwLock<stat::Stat>>,
+    freq: Duration,
+    alive: Arc<RwLock<bool>>,
+}
+
+impl Handler for Server {
+    fn on_open(&mut self, _: Handshake) -> Result<()> {
+        // start a msg thread that outputs stat at freq
+        let stat_lock = self.stat_lock.clone();
+        let alive = self.alive.clone();
+        let freq = self.freq.clone();
+        let out = self.out.clone();
+
+        thread::spawn(move || {
+            while *alive.read().unwrap() {
+                thread::sleep(freq);
+                let stat = stat_lock.read().unwrap();
+                if out.send(format!("{:?}", *stat)).is_err() {
+                    *alive.write().unwrap() = false;
+                    return;
+                }
+            }
+        });
+        Ok(())
+    }
+
+    // TODO: allow adjustment of send frequency
+    fn on_message(&mut self, msg: Message) -> Result<()> {
+        println!("\"{}\" said Roger.", msg);
+        Ok(())
+    }
+
+    fn on_close(&mut self, code: CloseCode, reason: &str) {
+        println!("Jim, he's dead.");
+        // kill thread worker
+        *self.alive.write().unwrap() = false;
+    }
 }
 
 fn main() {
     let _path = "/proc/stat";
-
     let stat_contents = read_to_string(_path)
         .unwrap_or_else(|_| panic!("failed to read '{}'", _path));
-
-    poor_mans_bench(&stat_contents, 10);
-
     let stat = stat::Stat::new(&stat_contents);
-    println!("{:?}", stat);
+
+    // initial lock state
+    let stat_lock = Arc::new(RwLock::new(stat));
+    let ws_stat_lock = stat_lock.clone();
+
+
+    // start read, parse thread
+    thread::spawn(move || parse_forever(stat_lock.clone(), _path));
+
+    listen("127.0.0.1:3012", |out| Server {
+        out,
+        stat_lock: ws_stat_lock.clone(),
+        freq: Duration::new(1, 0),
+        alive: Arc::new(RwLock::new(true)),
+    }).unwrap();
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::*;
+    use test::Bencher;
+
+    #[bench]
+    fn stat_read_and_parse(b: &mut Bencher) {
+        b.iter(|| {
+            let _path = "/proc/stat";
+            let stat_contents = read_to_string(_path)
+                .unwrap_or_else(|_| panic!("failed to read '{}'", _path));
+            stat::Stat::new(&stat_contents);
+        })
+    }
+
+    #[bench]
+    fn stat_parse(b: &mut Bencher) {
+        let _path = "/proc/stat";
+        let stat_contents = read_to_string(_path)
+            .unwrap_or_else(|_| panic!("failed to read '{}'", _path));
+
+        b.iter(|| stat::Stat::new(&stat_contents))
+    }
 }
